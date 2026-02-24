@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D CNN for MCI Conversion Prediction</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; color: #1f2937; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 350px; max-height: 400px; }
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .step-active { border-left: 4px solid #0891b2; background-color: #f0fdfa; }
+        .step-inactive { border-left: 4px solid transparent; }
+        .tab-active { border-bottom: 2px solid #0891b2; color: #0891b2; }
+        .tab-inactive { border-bottom: 2px solid transparent; color: #6b7280; }
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+    </style>
+    <!-- Chosen Palette: Medical Tech - Neutral Slate Background (#f3f4f6), Primary Cyan/Teal (#0891b2) for technology/medical feel, Deep Slate (#1f2937) for text, White (#ffffff) for cards. -->
+    
+    <!-- Application Structure Plan: 
+         1. Hero Section: Immediate high-level overview of the project goal (MCI to AD prediction) and dataset (ADNI).
+         2. Pipeline Explorer (Interactive): A vertical step-by-step interactive flow to explain the complex preprocessing logic (Torchio transformations) which is critical to the paper's methodology.
+         3. Model Architecture (Visual): A block-based visualizer to break down the 3D CNN structure, allowing users to hover/click for details on layers like Conv3d and BatchNorm.
+         4. Performance Dashboard (Data-Rich): The core interactive section. Recreates the training and validation curves (Accuracy/Loss) from the report using Chart.js. Includes interactive toggles and summary metrics.
+         5. Conclusions & Impact: Synthesized findings in a digestible card format.
+         Rationale: This structure moves from concept (Hero) to process (Pipeline/Model) to proof (Performance), mirroring the scientific method but in an interactive, non-linear web format.
+    -->
+    
+    <!-- Visualization & Content Choices:
+         - Hero: Text + Stats. Goal: Establish context.
+         - Pipeline: Interactive List (HTML/JS). Goal: Explain 'Methodology'. Justification: Text-heavy processes are better digested step-by-step.
+         - Architecture: CSS Grid Diagram. Goal: Visualise 'Model'. Justification: 3D CNNs are structural; a diagram is clearer than text. NO SVG used.
+         - Dashboard: Chart.js Line Charts. Goal: Show 'Results'. Interaction: Toggle between Accuracy/Loss, hover for exact epoch values. Justification: Dynamic charts allow user to verify convergence and overfitting claim.
+         - Metrics: Big Number Cards. Goal: Highlight 'Key Findings'.
+         
+         CONFIRMATION: NO SVG graphics used. NO Mermaid JS used.
+    -->
+</head>
+<body class="antialiased selection:bg-cyan-200 selection:text-cyan-900">
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <span class="text-xl font-bold text-cyan-700 tracking-tight">NeuroPredict <span class="text-gray-400 font-light">| 3D CNN</span></span>
+                </div>
+                <div class="hidden sm:flex sm:space-x-8 items-center">
+                    <button onclick="scrollToSection('overview')" class="text-gray-600 hover:text-cyan-600 px-3 py-2 text-sm font-medium transition">Overview</button>
+                    <button onclick="scrollToSection('pipeline')" class="text-gray-600 hover:text-cyan-600 px-3 py-2 text-sm font-medium transition">Pipeline</button>
+                    <button onclick="scrollToSection('architecture')" class="text-gray-600 hover:text-cyan-600 px-3 py-2 text-sm font-medium transition">Architecture</button>
+                    <button onclick="scrollToSection('results')" class="text-gray-600 hover:text-cyan-600 px-3 py-2 text-sm font-medium transition">Results</button>
+                </div>
+                <!-- Mobile Menu Button -->
+                <div class="flex items-center sm:hidden">
+                    <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')" class="text-gray-500 hover:text-cyan-600 p-2">
+                        <span class="text-2xl">☰</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="mobile-menu" class="hidden sm:hidden bg-white border-t border-gray-100 p-4">
+             <button onclick="scrollToSection('overview')" class="block w-full text-left text-gray-600 hover:text-cyan-600 py-2">Overview</button>
+             <button onclick="scrollToSection('pipeline')" class="block w-full text-left text-gray-600 hover:text-cyan-600 py-2">Pipeline</button>
+             <button onclick="scrollToSection('architecture')" class="block w-full text-left text-gray-600 hover:text-cyan-600 py-2">Architecture</button>
+             <button onclick="scrollToSection('results')" class="block w-full text-left text-gray-600 hover:text-cyan-600 py-2">Results</button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header id="overview" class="bg-gradient-to-br from-white to-gray-50 py-16 sm:py-24">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-left">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight mb-6">
+                        Predicting MCI to Alzheimer's Conversion
+                    </h1>
+                    <p class="text-lg text-gray-600 mb-8 leading-relaxed">
+                        An automated Deep Learning system utilizing <strong>3D Convolutional Neural Networks (CNN)</strong> to analyze volumetric structural MRI data. Built on the ADNI dataset to identify individuals at high risk of conversion.
+                    </p>
+                    <div class="flex flex-wrap gap-4 justify-center sm:justify-start">
+                        <div class="bg-cyan-50 border border-cyan-100 px-4 py-2 rounded-lg text-cyan-800 font-semibold text-sm">
+                            Dataset: ADNI
+                        </div>
+                        <div class="bg-cyan-50 border border-cyan-100 px-4 py-2 rounded-lg text-cyan-800 font-semibold text-sm">
+                            Input: T1-weighted MRI (NIfTI)
+                        </div>
+                        <div class="bg-cyan-50 border border-cyan-100 px-4 py-2 rounded-lg text-cyan-800 font-semibold text-sm">
+                            Tech: PyTorch & Torchio
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Key Performance Metrics (Peak)</h3>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="text-center p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm text-gray-500 uppercase tracking-wide">Validation Accuracy</p>
+                            <p class="text-3xl font-bold text-cyan-600">96.55%</p>
+                        </div>
+                        <div class="text-center p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm text-gray-500 uppercase tracking-wide">Validation Loss</p>
+                            <p class="text-3xl font-bold text-gray-800">0.2167</p>
+                        </div>
+                        <div class="text-center p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm text-gray-500 uppercase tracking-wide">Training Epochs</p>
+                            <p class="text-3xl font-bold text-gray-800">20</p>
+                        </div>
+                        <div class="text-center p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm text-gray-500 uppercase tracking-wide">Input Shape</p>
+                            <p class="text-xl font-bold text-gray-800 pt-1">128³ Voxels</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Methodology Pipeline Section -->
+    <section id="pipeline" class="py-16 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Preprocessing Pipeline</h2>
+                <p class="text-gray-600">
+                    Raw MRI data is high-dimensional and variable. To prepare it for the 3D CNN, a rigorous pipeline using the <code>torchio</code> library transforms raw NIfTI scans into standardized tensors.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Interactive Steps -->
+                <div class="lg:col-span-1 space-y-2">
+                    <button onclick="updatePipelineDisplay(0)" id="step-btn-0" class="step-active w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none">
+                        <h4 class="font-bold text-gray-800">1. Data Extraction & QC</h4>
+                        <p class="text-sm text-gray-500 mt-1">Cleaning raw .nii files</p>
+                    </button>
+                    <button onclick="updatePipelineDisplay(1)" id="step-btn-1" class="step-inactive w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none">
+                        <h4 class="font-bold text-gray-800">2. ToCanonical</h4>
+                        <p class="text-sm text-gray-500 mt-1">Standardizing orientation</p>
+                    </button>
+                    <button onclick="updatePipelineDisplay(2)" id="step-btn-2" class="step-inactive w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none">
+                        <h4 class="font-bold text-gray-800">3. Resampling</h4>
+                        <p class="text-sm text-gray-500 mt-1">Uniform voxel spacing</p>
+                    </button>
+                    <button onclick="updatePipelineDisplay(3)" id="step-btn-3" class="step-inactive w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none">
+                        <h4 class="font-bold text-gray-800">4. Crop or Pad</h4>
+                        <p class="text-sm text-gray-500 mt-1">Consistent dimensions</p>
+                    </button>
+                    <button onclick="updatePipelineDisplay(4)" id="step-btn-4" class="step-inactive w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none">
+                        <h4 class="font-bold text-gray-800">5. Z-Normalization</h4>
+                        <p class="text-sm text-gray-500 mt-1">Intensity scaling</p>
+                    </button>
+                </div>
+
+                <!-- Step Details Display -->
+                <div class="lg:col-span-2">
+                    <div class="h-full bg-gray-50 rounded-2xl p-8 border border-gray-200 flex flex-col justify-center relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10">
+                            <span class="text-9xl font-bold text-gray-300" id="step-number-bg">1</span>
+                        </div>
+                        <div id="pipeline-content">
+                            <h3 class="text-2xl font-bold text-cyan-700 mb-4">Data Extraction & Quality Control</h3>
+                            <p class="text-gray-700 leading-relaxed mb-6">
+                                The raw data comes in a nested directory structure within a ZIP archive. The first step involves extracting all <code>.nii</code> (NIfTI) files into a flat directory.
+                            </p>
+                            <ul class="space-y-3 mb-6">
+                                <li class="flex items-start">
+                                    <span class="text-cyan-500 mr-2">✓</span>
+                                    <span class="text-gray-600">Extracts files to <code>/content/ADNI/nii</code></span>
+                                </li>
+                                <li class="flex items-start">
+                                    <span class="text-cyan-500 mr-2">✓</span>
+                                    <span class="text-gray-600"><strong>Quality Check:</strong> Removes unreadable files or scans with < 10 slices.</span>
+                                </li>
+                                <li class="flex items-start">
+                                    <span class="text-cyan-500 mr-2">✓</span>
+                                    <span class="text-gray-600"><strong>Deduplication:</strong> Retains only the first scan per patient ID to avoid data leakage.</span>
+                                </li>
+                            </ul>
+                            <div class="bg-gray-800 text-gray-200 p-4 rounded-lg font-mono text-sm shadow-inner">
+                                <span class="text-purple-400">import</span> torchio <span class="text-purple-400">as</span> tio<br>
+                                # Initial extraction and filtering logic applied here
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Model Architecture Section -->
+    <section id="architecture" class="py-16 bg-gray-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-12">
+                <h2 class="text-3xl font-bold mb-4">3D CNN Architecture</h2>
+                <p class="text-gray-400 max-w-3xl">
+                    The model leverages spatial volumetric features using PyTorch's <code>nn.Module</code>. It ingests the full 128x128x128 volume rather than 2D slices.
+                </p>
+            </div>
+
+            <!-- Architecture Diagram -->
+            <div class="flex flex-col lg:flex-row gap-6 items-center justify-center overflow-x-auto pb-4">
+                
+                <!-- Input -->
+                <div class="flex flex-col items-center group cursor-pointer hover:scale-105 transition">
+                    <div class="w-32 h-32 bg-gray-800 border-2 border-cyan-500 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(8,145,178,0.3)]">
+                        <span class="font-mono text-cyan-400">Input<br>128x128x128</span>
+                    </div>
+                    <div class="h-8 w-0.5 bg-gray-700"></div>
+                </div>
+
+                <!-- Layer Block 1 -->
+                <div class="flex flex-col items-center group cursor-pointer hover:scale-105 transition" onclick="showLayerInfo('conv')">
+                    <div class="w-40 h-24 bg-gradient-to-br from-cyan-900 to-cyan-800 border border-cyan-700 rounded-lg flex flex-col items-center justify-center p-2 relative overflow-hidden">
+                        <div class="font-bold text-white">3D Conv Block</div>
+                        <div class="text-xs text-cyan-200 mt-1">Conv3d + BatchNorm + ReLU</div>
+                        <div class="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition"></div>
+                    </div>
+                    <div class="h-8 w-0.5 bg-gray-700"></div>
+                </div>
+
+                <!-- Pooling -->
+                <div class="flex flex-col items-center group cursor-pointer hover:scale-105 transition" onclick="showLayerInfo('pool')">
+                    <div class="w-32 h-20 bg-gray-800 border border-purple-500 rounded-lg flex flex-col items-center justify-center p-2">
+                        <div class="font-bold text-purple-200">Max Pool 3D</div>
+                        <div class="text-xs text-gray-400 mt-1">Downsample</div>
+                    </div>
+                    <div class="h-8 w-0.5 bg-gray-700"></div>
+                </div>
+
+                <!-- Repeat Indicator -->
+                <div class="flex flex-col items-center">
+                    <div class="text-gray-500 text-sm tracking-widest mb-2">[ REPEATED BLOCKS ]</div>
+                    <div class="h-8 w-0.5 bg-gray-700"></div>
+                </div>
+
+                <!-- Global Pool -->
+                <div class="flex flex-col items-center group cursor-pointer hover:scale-105 transition" onclick="showLayerInfo('adaptive')">
+                    <div class="w-36 h-20 bg-gray-800 border border-yellow-500 rounded-lg flex flex-col items-center justify-center p-2">
+                        <div class="font-bold text-yellow-200">Adaptive Avg Pool</div>
+                        <div class="text-xs text-gray-400 mt-1">Output: 1x1x1</div>
+                    </div>
+                    <div class="h-8 w-0.5 bg-gray-700"></div>
+                </div>
+
+                <!-- Classifier -->
+                <div class="flex flex-col items-center group cursor-pointer hover:scale-105 transition" onclick="showLayerInfo('linear')">
+                    <div class="w-32 h-24 bg-gradient-to-br from-green-900 to-green-800 border border-green-600 rounded-lg flex flex-col items-center justify-center p-2">
+                        <div class="font-bold text-white">Classifier</div>
+                        <div class="text-xs text-green-200 mt-1">Linear Layer</div>
+                        <div class="text-xs text-green-200">Sigmoid</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Dynamic Layer Info Panel -->
+            <div id="layer-info" class="mt-8 bg-gray-800 p-6 rounded-xl border border-gray-700 max-w-4xl mx-auto text-center transition-all duration-300 opacity-100">
+                <h3 class="text-xl font-bold text-cyan-400 mb-2">3D Convolutional Block</h3>
+                <p class="text-gray-300">
+                    Utilizes <code>nn.Conv3d</code> to extract volumetric features. Followed immediately by <code>nn.BatchNorm3d</code> to stabilize training and <code>nn.ReLU()</code> to introduce non-linearity. This is the core mechanism for understanding spatial brain structures.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Training Results Section -->
+    <section id="results" class="py-16 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="mb-12">
+                <h2 class="text-3xl font-bold text-gray-900 mb-4">Training Dynamics & Results</h2>
+                <p class="text-gray-600 max-w-3xl">
+                    The model was trained for 20 epochs using the Adam optimizer (lr=1e-4) and BCEWithLogitsLoss.
+                    Performance was monitored on both training and validation sets to ensure generalization and detect overfitting.
+                </p>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+                
+                <!-- Chart Area -->
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800">Learning Curves</h3>
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button onclick="toggleChart('accuracy')" id="btn-acc" class="px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow-sm text-cyan-700 transition">Accuracy</button>
+                            <button onclick="toggleChart('loss')" id="btn-loss" class="px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-800 transition">Loss</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Container -->
+                    <div class="chart-container">
+                        <canvas id="trainingChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Key Insights Panel -->
+                <div class="space-y-6">
+                    <!-- Stat Card 1 -->
+                    <div class="bg-cyan-50 rounded-xl p-6 border border-cyan-100">
+                        <h4 class="text-cyan-800 font-bold mb-2">Generalization Gap</h4>
+                        <p class="text-sm text-cyan-700 mb-4">
+                            Validation accuracy consistently tracked higher than training accuracy. This inverse gap suggests strong regularization or that the validation set contained representative features easily captured by the model.
+                        </p>
+                        <div class="h-2 bg-cyan-200 rounded-full overflow-hidden">
+                            <div class="h-full bg-cyan-600 w-full animate-pulse"></div>
+                        </div>
+                    </div>
+
+                    <!-- Stat Card 2 -->
+                    <div class="bg-indigo-50 rounded-xl p-6 border border-indigo-100">
+                        <h4 class="text-indigo-800 font-bold mb-2">Convergence</h4>
+                        <p class="text-sm text-indigo-700">
+                            Training stabilized around Epoch 11-12.
+                        </p>
+                        <ul class="mt-3 space-y-2 text-sm text-indigo-800">
+                            <li class="flex justify-between">
+                                <span>Peak Val Acc:</span>
+                                <span class="font-bold">96.55%</span>
+                            </li>
+                            <li class="flex justify-between">
+                                <span>Final Val Loss:</span>
+                                <span class="font-bold">0.2167</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="bg-gray-800 text-white rounded-xl p-6 shadow-lg">
+                        <h4 class="font-bold mb-2">Deployment Ready</h4>
+                        <p class="text-sm text-gray-400 mb-4">
+                            The trained model is exported to ONNX format for cross-platform compatibility.
+                        </p>
+                        <div class="flex items-center text-xs font-mono bg-gray-900 p-2 rounded border border-gray-700">
+                            <span class="text-green-400 mr-2">➜</span> cnn3d_model.onnx
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Table Toggle -->
+            <div class="border-t border-gray-200 pt-8">
+                <h3 class="text-lg font-bold text-gray-800 mb-4 cursor-pointer flex items-center group" onclick="document.getElementById('dataTable').classList.toggle('hidden')">
+                    View Detailed Epoch Logs
+                    <span class="ml-2 transform group-hover:translate-x-1 transition">↓</span>
+                </h3>
+                <div id="dataTable" class="hidden overflow-x-auto bg-gray-50 rounded-lg border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Epoch</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Train Loss</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Val Loss</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Train Acc</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Val Acc</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-400 py-12 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center sm:text-left">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div>
+                    <h5 class="text-white font-bold mb-4">About</h5>
+                    <p class="text-sm">Research based on ADNI Dataset. 3D CNN implementation for early detection of Alzheimer's Disease.</p>
+                </div>
+                <div>
+                    <h5 class="text-white font-bold mb-4">Tools</h5>
+                    <ul class="text-sm space-y-2">
+                        <li>PyTorch</li>
+                        <li>Torchio</li>
+                        <li>Google Colab</li>
+                    </ul>
+                </div>
+                <div>
+                    <h5 class="text-white font-bold mb-4">Reference</h5>
+                    <p class="text-sm">Based on "3D CNN for MCI Conversion Prediction (ADNI Dataset)" Report.</p>
+                </div>
+            </div>
+            <div class="mt-8 pt-8 border-t border-gray-800 text-center text-xs">
+                © 2023 MCI Prediction Research. Generated Interactive Report.
+            </div>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- DATA STORAGE ---
+        // Extracted manually from report logs and plots
+        const epochData = [
+            { epoch: 1, tl: 0.6337, vl: 0.4313, ta: 0.7281, va: 0.8966 },
+            { epoch: 2, tl: 0.5690, vl: 0.3398, ta: 0.7544, va: 0.8966 },
+            { epoch: 3, tl: 0.5324, vl: 0.3400, ta: 0.7719, va: 0.9310 },
+            { epoch: 4, tl: 0.5358, vl: 0.3336, ta: 0.7456, va: 0.8621 },
+            { epoch: 5, tl: 0.5281, vl: 0.4511, ta: 0.7544, va: 0.8621 },
+            { epoch: 6, tl: 0.5260, vl: 0.3384, ta: 0.7456, va: 0.8621 },
+            { epoch: 7, tl: 0.5014, vl: 0.3616, ta: 0.7719, va: 0.9310 },
+            { epoch: 8, tl: 0.4875, vl: 0.2989, ta: 0.7544, va: 0.9655 }, // High val acc
+            { epoch: 9, tl: 0.5058, vl: 0.4871, ta: 0.7719, va: 0.8966 },
+            { epoch: 10, tl: 0.4838, vl: 0.2682, ta: 0.7544, va: 0.8966 },
+            { epoch: 11, tl: 0.4874, vl: 0.3861, ta: 0.7456, va: 0.8966 },
+            { epoch: 12, tl: 0.4779, vl: 0.3602, ta: 0.7719, va: 0.9310 }, // vl approx from chart
+            { epoch: 13, tl: 0.4551, vl: 0.2637, ta: 0.7807, va: 0.9310 },
+            { epoch: 14, tl: 0.4729, vl: 0.2437, ta: 0.7895, va: 0.9310 },
+            { epoch: 15, tl: 0.4928, vl: 0.2467, ta: 0.7719, va: 0.9310 },
+            { epoch: 16, tl: 0.4433, vl: 0.4691, ta: 0.8070, va: 0.8621 },
+            { epoch: 17, tl: 0.4821, vl: 0.3106, ta: 0.7368, va: 0.9310 },
+            { epoch: 18, tl: 0.4678, vl: 0.2976, ta: 0.7807, va: 0.9655 },
+            { epoch: 19, tl: 0.4642, vl: 0.4257, ta: 0.7719, va: 0.8966 },
+            { epoch: 20, tl: 0.4801, vl: 0.2167, ta: 0.7544, va: 0.8966 }
+        ];
+
+        // Pipeline Step Data
+        const pipelineSteps = [
+            {
+                title: "Data Extraction & Quality Control",
+                content: "The raw data comes in a nested directory structure within a ZIP archive. We first extract .nii files to a flat directory. <strong>Quality Control</strong> is strictly applied: unreadable files or scans with fewer than 10 slices are removed to prevent model errors.",
+                code: "import torchio as tio\n# Filter out files < 10 slices"
+            },
+            {
+                title: "Standardization: ToCanonical",
+                content: "Medical images can have different orientations. <code>tio.ToCanonical()</code> reorients all images to the standard <strong>RAS (Right-Anterior-Superior)</strong> coordinate system. This ensures that 'left' is 'left' for the model in every single image.",
+                code: "transform = tio.ToCanonical()"
+            },
+            {
+                title: "Resampling",
+                content: "MRI scans often have different voxel sizes (resolution). <code>tio.Resample((1, 1, 1))</code> resamples every image to a uniform <strong>1mm isotropic voxel spacing</strong>. This is crucial for the CNN filters to learn consistent spatial features.",
+                code: "transform = tio.Resample((1, 1, 1))"
+            },
+            {
+                title: "Crop or Pad",
+                content: "CNNs require fixed input sizes. <code>tio.CropOrPad((128, 128, 128))</code> either crops the center or pads the edges with zero intensity to ensure every input volume is exactly <strong>128x128x128 voxels</strong>.",
+                code: "transform = tio.CropOrPad((128, 128, 128))"
+            },
+            {
+                title: "Z-Normalization",
+                content: "Intensity values in MRI are arbitrary. <code>tio.ZNormalization()</code> normalizes the intensity values of each image to have a <strong>mean of 0 and standard deviation of 1</strong>, helping the model converge faster.",
+                code: "transform = tio.ZNormalization()"
+            }
+        ];
+
+        const layerInfos = {
+            'conv': { title: "3D Conv Block", text: "The workhorse of the model. <code>nn.Conv3d</code> filters scan the 3D volume. <code>nn.BatchNorm3d</code> follows immediately to normalize activations, stabilizing the gradient. <code>nn.ReLU</code> adds non-linearity." },
+            'pool': { title: "Max Pooling 3D", text: "<code>nn.MaxPool3d</code> reduces the spatial dimensions of the feature maps. This reduces computational cost and provides translational invariance, helping the model focus on features rather than exact locations." },
+            'adaptive': { title: "Adaptive Avg Pool", text: "<code>nn.AdaptiveAvgPool3d(1)</code> forces the output to a 1x1x1 tensor regardless of the input size. This creates a fixed-size feature vector that can be fed into the final classifier." },
+            'linear': { title: "Classifier Head", text: "A fully connected <code>nn.Linear</code> layer takes the feature vector and outputs a single logit. Combined with <code>BCEWithLogitsLoss</code>, this acts as a Sigmoid classifier for Binary prediction (MCI vs Converter)." }
+        };
+
+        // --- NAVIGATION ---
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- PIPELINE INTERACTION ---
+        function updatePipelineDisplay(index) {
+            const step = pipelineSteps[index];
+            const contentDiv = document.getElementById('pipeline-content');
+            const bgNum = document.getElementById('step-number-bg');
+            
+            // Fade out
+            contentDiv.style.opacity = '0.5';
+            
+            setTimeout(() => {
+                // Update text
+                contentDiv.innerHTML = `
+                    <h3 class="text-2xl font-bold text-cyan-700 mb-4">${step.title}</h3>
+                    <p class="text-gray-700 leading-relaxed mb-6">${step.content}</p>
+                    <div class="bg-gray-800 text-gray-200 p-4 rounded-lg font-mono text-sm shadow-inner overflow-x-auto">
+                        ${step.code.replace(/\n/g, '<br>')}
+                    </div>
+                `;
+                bgNum.textContent = index + 1;
+                contentDiv.style.opacity = '1';
+            }, 200);
+
+            // Update Buttons
+            pipelineSteps.forEach((_, i) => {
+                const btn = document.getElementById(`step-btn-${i}`);
+                if (i === index) {
+                    btn.className = "step-active w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none";
+                } else {
+                    btn.className = "step-inactive w-full text-left p-4 rounded-r-lg transition duration-200 hover:bg-gray-50 focus:outline-none";
+                }
+            });
+        }
+
+        // --- LAYER INFO INTERACTION ---
+        function showLayerInfo(key) {
+            const info = layerInfos[key];
+            const panel = document.getElementById('layer-info');
+            panel.style.opacity = '0.5';
+            setTimeout(() => {
+                panel.innerHTML = `<h3 class="text-xl font-bold text-cyan-400 mb-2">${info.title}</h3><p class="text-gray-300">${info.text}</p>`;
+                panel.style.opacity = '1';
+            }, 150);
+        }
+
+        // --- CHART LOGIC ---
+        let trainingChartInstance = null;
+
+        function initChart() {
+            const ctx = document.getElementById('trainingChart').getContext('2d');
+            
+            const labels = epochData.map(d => `Epoch ${d.epoch}`);
+            const trainAcc = epochData.map(d => d.ta);
+            const valAcc = epochData.map(d => d.va);
+            
+            trainingChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Validation Accuracy',
+                            data: valAcc,
+                            borderColor: '#0891b2', // Cyan 600
+                            backgroundColor: 'rgba(8, 145, 178, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Training Accuracy',
+                            data: trainAcc,
+                            borderColor: '#9ca3af', // Gray 400
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1f2937',
+                            bodyColor: '#4b5563',
+                            borderColor: '#e5e7eb',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            min: 0.2,
+                            max: 1.0,
+                            grid: {
+                                color: '#f3f4f6'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function toggleChart(type) {
+            const btnAcc = document.getElementById('btn-acc');
+            const btnLoss = document.getElementById('btn-loss');
+
+            if (type === 'accuracy') {
+                // Style updates
+                btnAcc.className = "px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow-sm text-cyan-700 transition";
+                btnLoss.className = "px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-800 transition";
+                
+                // Data updates
+                trainingChartInstance.data.datasets[0].label = "Validation Accuracy";
+                trainingChartInstance.data.datasets[0].data = epochData.map(d => d.va);
+                trainingChartInstance.data.datasets[0].borderColor = '#0891b2';
+                
+                trainingChartInstance.data.datasets[1].label = "Training Accuracy";
+                trainingChartInstance.data.datasets[1].data = epochData.map(d => d.ta);
+                trainingChartInstance.options.scales.y.min = 0.5;
+
+            } else {
+                // Style updates
+                btnLoss.className = "px-4 py-1.5 rounded-md text-sm font-medium bg-white shadow-sm text-cyan-700 transition";
+                btnAcc.className = "px-4 py-1.5 rounded-md text-sm font-medium text-gray-500 hover:text-gray-800 transition";
+
+                // Data updates
+                trainingChartInstance.data.datasets[0].label = "Validation Loss";
+                trainingChartInstance.data.datasets[0].data = epochData.map(d => d.vl);
+                trainingChartInstance.data.datasets[0].borderColor = '#f59e0b'; // Amber
+                
+                trainingChartInstance.data.datasets[1].label = "Training Loss";
+                trainingChartInstance.data.datasets[1].data = epochData.map(d => d.tl);
+                trainingChartInstance.options.scales.y.min = 0;
+            }
+            trainingChartInstance.update();
+        }
+
+        // --- POPULATE TABLE ---
+        function populateTable() {
+            const tbody = document.getElementById('logTableBody');
+            let html = '';
+            epochData.forEach(row => {
+                html += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap font-medium text-gray-900">${row.epoch}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-500">${row.tl.toFixed(4)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-500 font-bold text-amber-600">${row.vl.toFixed(4)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-500">${(row.ta * 100).toFixed(2)}%</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-500 font-bold text-cyan-700">${(row.va * 100).toFixed(2)}%</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // --- INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            populateTable();
+        });
+
+    </script>
+</body>
+</html>
